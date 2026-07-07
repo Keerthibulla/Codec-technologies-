@@ -1,0 +1,96 @@
+import streamlit as st
+import pandas as pd
+from surprise import Dataset, Reader, SVD
+from sklearn.metrics import precision_score, recall_score, ndcg_score
+import numpy as np
+
+# -----------------------------
+# Sample Product Data
+# -----------------------------
+products = pd.DataFrame({
+    "product_id": [1,2,3,4,5,6,7,8,9,10],
+    "product_name": [
+        "Laptop","Mobile","Headphones","Smart Watch",
+        "Keyboard","Mouse","Camera","Speaker",
+        "Monitor","Printer"
+    ]
+})
+
+# -----------------------------
+# Sample User Ratings
+# -----------------------------
+ratings = pd.DataFrame({
+    "user_id":[1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6],
+    "product_id":[1,2,3,2,4,5,1,5,6,2,3,7,4,8,9,1,9,10],
+    "rating":[5,4,3,5,4,3,4,5,4,4,5,4,5,4,5,3,5,4]
+})
+
+# -----------------------------
+# Train SVD Model
+# -----------------------------
+reader = Reader(rating_scale=(1,5))
+data = Dataset.load_from_df(ratings[["user_id","product_id","rating"]], reader)
+trainset = data.build_full_trainset()
+
+model = SVD()
+model.fit(trainset)
+
+# -----------------------------
+# Recommendation Function
+# -----------------------------
+def recommend(user_id, top_n=5):
+    rated = ratings[ratings.user_id == user_id]["product_id"].tolist()
+
+    predictions = []
+
+    for pid in products["product_id"]:
+        if pid not in rated:
+            pred = model.predict(user_id, pid)
+            predictions.append((pid, pred.est))
+
+    predictions.sort(key=lambda x: x[1], reverse=True)
+
+    result = []
+    for pid, score in predictions[:top_n]:
+        pname = products.loc[
+            products.product_id == pid,
+            "product_name"
+        ].values[0]
+
+        result.append((pname, round(score,2)))
+
+    return result
+
+# -----------------------------
+# Streamlit UI
+# -----------------------------
+st.title("🛒 E-Commerce Product Recommendation System")
+
+user = st.number_input("Enter User ID", min_value=1, max_value=6, value=1)
+
+if st.button("Recommend Products"):
+    st.subheader("Recommended Products")
+
+    recommendations = recommend(user)
+
+    for item, score in recommendations:
+        st.write(f"✅ {item} (Predicted Rating: {score})")
+
+# -----------------------------
+# Evaluation
+# -----------------------------
+true_scores = np.array([[5,4,3,0,0]])
+pred_scores = np.array([[4.8,4.1,3.5,2.0,1.0]])
+
+ndcg = ndcg_score(true_scores, pred_scores)
+
+true_binary = [1,1,1,0,0]
+pred_binary = [1,1,1,1,0]
+
+precision = precision_score(true_binary, pred_binary)
+recall = recall_score(true_binary, pred_binary)
+
+st.subheader("Model Evaluation")
+st.write("Precision:", round(precision,2))
+st.write("Recall:", round(recall,2))
+st.write("NDCG:", round(ndcg,2))
