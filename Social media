@@ -1,0 +1,109 @@
+import streamlit as st
+import pandas as pd
+from googleapiclient.discovery import build
+import plotly.express as px
+
+# ----------------------------
+# Enter your YouTube API Key
+# ----------------------------
+API_KEY = "YOUR_YOUTUBE_API_KEY"
+
+youtube = build("youtube", "v3", developerKey=API_KEY)
+
+st.title("📊 Social Media Engagement Dashboard (YouTube)")
+st.write("Analyze Likes, Views, Comments and Engagement Rate")
+
+channel_id = st.text_input("Enter YouTube Channel ID")
+
+if st.button("Analyze"):
+    request = youtube.search().list(
+        part="snippet",
+        channelId=channel_id,
+        maxResults=10,
+        order="date",
+        type="video"
+    )
+
+    response = request.execute()
+
+    video_ids = []
+
+    for item in response["items"]:
+        video_ids.append(item["id"]["videoId"])
+
+    stats_request = youtube.videos().list(
+        part="statistics,snippet",
+        id=",".join(video_ids)
+    )
+
+    stats_response = stats_request.execute()
+
+    data = []
+
+    for item in stats_response["items"]:
+        title = item["snippet"]["title"]
+        views = int(item["statistics"].get("viewCount", 0))
+        likes = int(item["statistics"].get("likeCount", 0))
+        comments = int(item["statistics"].get("commentCount", 0))
+
+        engagement = ((likes + comments) / views * 100) if views > 0 else 0
+
+        data.append({
+            "Title": title,
+            "Views": views,
+            "Likes": likes,
+            "Comments": comments,
+            "Engagement Rate (%)": round(engagement, 2)
+        })
+
+    df = pd.DataFrame(data)
+
+    st.subheader("Video Statistics")
+    st.dataframe(df)
+
+    fig1 = px.bar(df,
+                  x="Title",
+                  y="Views",
+                  title="Views per Video")
+    st.plotly_chart(fig1)
+
+    fig2 = px.bar(df,
+                  x="Title",
+                  y="Likes",
+                  title="Likes per Video")
+    st.plotly_chart(fig2)
+
+    fig3 = px.bar(df,
+                  x="Title",
+                  y="Comments",
+                  title="Comments per Video")
+    st.plotly_chart(fig3)
+
+    fig4 = px.scatter(df,
+                      x="Views",
+                      y="Engagement Rate (%)",
+                      text="Title",
+                      title="Views vs Engagement")
+    st.plotly_chart(fig4)
+
+    avg = df["Engagement Rate (%)"].mean()
+
+    st.subheader("Recommendations")
+
+    if avg > 8:
+        st.success("Excellent engagement! Continue posting similar content.")
+    elif avg > 4:
+        st.info("Good engagement. Increase consistency and audience interaction.")
+    else:
+        st.warning("Low engagement. Improve thumbnails, titles, and posting schedule.")
+
+    st.markdown("""
+### Best Posting Strategies
+- Upload consistently (2–3 videos per week).
+- Post during evening hours (6 PM–9 PM).
+- Use attractive thumbnails.
+- Include relevant keywords in titles and descriptions.
+- Reply to comments quickly.
+- Create Shorts to increase reach.
+- Analyze top-performing videos and create similar content.
+""")
